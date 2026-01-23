@@ -10,6 +10,6 @@ cd ${PATH}
 var=$(pwd)
 echo "The current working directory is: $var."
 
-/usr/local/bin/docker build -t fitbot-alvaro -f ${URL_DOCKER_FILE} .
+/usr/local/bin/docker build -t fitbot-alvaro-precompiled -f ${URL_DOCKER_FILE} .
 
 echo "Build finished"
