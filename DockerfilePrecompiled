@@ -1,0 +1,18 @@
+FROM python:3.13
+
+ENV PYTHONPATH=src
+WORKDIR /app
+
+# Copy files needed to install dependencies first (for better caching)
+COPY Makefile pyproject.toml /app/
+
+# Install uv and dependencies at build time
+RUN pip install uv \
+    && uv sync --frozen --no-cache \
+    && rm -rf /root/.cache
+
+# Copy remaining source code
+COPY src /app/src
+
+# Default command: just run the app (no .venv install needed)
+CMD ["make", "run"]
