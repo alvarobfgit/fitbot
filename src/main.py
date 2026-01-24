@@ -76,6 +76,7 @@ def main(
     target_day = datetime.today() + timedelta(days=days_in_advance)
     try:
         target_time, target_name = get_booking_goal_time(target_day, booking_goals)
+        wait_until_time(target_time)
     except NoBookingGoal as e:
         logger.info(str(e))
         return
