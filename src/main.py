@@ -1,5 +1,6 @@
 import argparse
 import json
+import time
 from datetime import datetime, timedelta
 
 
@@ -47,7 +48,7 @@ def wait_until_time(execution_time: str):
     target_hour = int(execution_time[:2])
     target_minute = int(execution_time[2:])
     
-    now = datetime.datetime.now()
+    now = datetime.now()
     target_today = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
 
     if now >= target_today:
