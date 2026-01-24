@@ -38,6 +38,30 @@ def get_class_to_book(classes: list[dict], target_time: str, class_name: str):
         )
     return _class[0]
 
+def wait_until_time(execution_time: str):
+    """
+    Wait until the specified time (HHMM format).
+    If the current time is already past the target, continue immediately,
+    but still wait an extra 1 second before continuing.
+    """
+    target_hour = int(execution_time[:2])
+    target_minute = int(execution_time[2:])
+    
+    now = datetime.datetime.now()
+    target_today = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+
+    if now >= target_today:
+        logger.info(f"Current time {now.strftime('%H:%M:%S')} is already past {execution_time[:2]}:{execution_time[2:]}.")
+    else:
+        seconds_to_wait = (target_today - now).total_seconds()
+        logger.info(f"Waiting {int(seconds_to_wait)} seconds until {execution_time[:2]}:{execution_time[2:]}...")
+        time.sleep(seconds_to_wait)
+        logger.info("Target time reached!")
+
+    # Always wait an extra 1 second before continuing
+    time.sleep(1)
+    logger.info("Continuing execution...")
+
 
 def main(
     email,
@@ -64,6 +88,10 @@ def main(
         logger.info("Class already booked. Nothing to do")
         return
     try:
+        # Before booking class be sure that current time is ok
+        wait_until_time(target_time)
+
+        # Book the class
         client.book_class(target_day, _class["id"], family_id)
     except BookingFailed as e:
         logger.error(str(e))
