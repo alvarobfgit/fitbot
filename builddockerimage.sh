@@ -4,7 +4,7 @@
 # This script MUST be executed as ROOT user
 
 PATH="/volume1/sourcecode/GitHub/latest/fitbot-master"
-URL_DOCKER_FILE="/volume1/sourcecode/GitHub/latest/fitbot-master/DockerfilePrecompiled"
+URL_DOCKER_FILE="/volume1/sourcecode/GitHub/latest/fitbot-master/Dockerfile"
 
 cd ${PATH}
 var=$(pwd)
