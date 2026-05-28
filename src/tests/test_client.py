@@ -105,6 +105,12 @@ class TestAimHarderClient:
                 does_not_raise(),
             ),
             (
+                {"bookState": 1, "id": "123"},
+                HTTPStatus.OK,
+                None,
+                does_not_raise(),
+            ),
+            (
                 {"errorMssg": "foo"},
                 HTTPStatus.OK,
                 None,
@@ -153,3 +159,30 @@ class TestAimHarderClient:
             m_post.return_value.status_code = status_code
             with expectation:
                 client.book_class(datetime.datetime(2022, 3, 2), "123")
+
+    def test_book_class_retries_on_logout_response(self):
+        # mock login for client creation
+        with patch("requests.Session.post") as m_post:
+            m_post.return_value.content = f'<span id="{ERROR_TAG_ID}"></span>'
+            client = AimHarderClient(
+                email="foo", password="bar", box_id=1, box_name="foo"
+            )
+
+        book_response_logout = type("R", (), {})()
+        book_response_logout.status_code = HTTPStatus.OK
+        book_response_logout.json = lambda: {"logout": 1}
+
+        book_response_success = type("R", (), {})()
+        book_response_success.status_code = HTTPStatus.OK
+        book_response_success.json = lambda: {"bookState": 1, "id": "123"}
+
+        login_response = type("R", (), {})()
+        login_response.content = f'<span id="{ERROR_TAG_ID}"></span>'
+
+        with (
+            patch("requests.Session.post") as m_post,
+            patch.object(client, "get_classes", return_value=[]),
+            patch("client.time.sleep"),
+        ):
+            m_post.side_effect = [book_response_logout, login_response, book_response_success]
+            client.book_class(datetime.datetime(2022, 3, 2), "123")
