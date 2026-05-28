@@ -9,6 +9,7 @@ from requests.exceptions import JSONDecodeError
 
 from constants import (
     LOGIN_ENDPOINT,
+    login_endpoint,
     book_endpoint,
     classes_endpoint,
     ERROR_TAG_ID,
@@ -48,7 +49,7 @@ class AimHarderClient:
         self.base_url = f"https://{box_name}.aimharder.com"
         self.box_id = box_id
         self.box_name = box_name
-        self.session = self._login(email, password, proxy)
+        self.session = self._login(email, password, proxy, box_name)
         self._init_box_session()
 
     def _init_box_session(self):
@@ -75,19 +76,25 @@ class AimHarderClient:
         }
 
     @staticmethod
-    def _login(email: str, password: str, proxy: Optional[str] = None) -> Session:
+    def _login(
+        email: str,
+        password: str,
+        proxy: Optional[str] = None,
+        box_name: Optional[str] = None,
+    ) -> Session:
         session = Session()
         session.proxies = {"https": proxy}
         session.headers.update(
             {
-                "Accept": "*/*",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.9",
                 "User-Agent": AimHarderClient.BROWSER_USER_AGENT,
             }
         )
+        endpoint = login_endpoint(box_name) if box_name else LOGIN_ENDPOINT
         logger.info(f"Using proxy: {'yes' if proxy else 'no'}")
         response = session.post(
-            LOGIN_ENDPOINT,
+            endpoint,
             data={
                 "login": "Log in",
                 "mail": email,
@@ -168,7 +175,7 @@ class AimHarderClient:
                                 "Booking request forced logout. Re-authenticating and retrying once."
                             )
                             self.session = self._login(
-                                self.email, self.password, self.proxy
+                                self.email, self.password, self.proxy, self.box_name
                             )
                             self._init_box_session()
                             continue
