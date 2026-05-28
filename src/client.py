@@ -54,6 +54,7 @@ class AimHarderClient:
     def _create_authenticated_session(self) -> Session:
         login_endpoints = (LOGIN_ENDPOINT, login_endpoint(self.box_name))
         last_error = None
+        last_session = None
         for endpoint in login_endpoints:
             try:
                 session = self._login(
@@ -63,6 +64,11 @@ class AimHarderClient:
                     endpoint=endpoint,
                 )
                 self.session = session
+                last_session = session
+                logger.info(
+                    "Session cookies available: %s",
+                    sorted({cookie.name for cookie in session.cookies}),
+                )
                 self._init_box_session()
                 self._ensure_cookie_alive()
                 if self._is_authenticated():
@@ -76,9 +82,22 @@ class AimHarderClient:
                 last_error = e
                 logger.warning("Login attempt failed for endpoint %s: %s", endpoint, e)
 
+        if last_session is not None:
+            logger.warning(
+                "Proceeding with unverified session as fallback. "
+                "API auth check failed for all login endpoints."
+            )
+            return last_session
+
         if last_error:
             raise last_error
         raise BookingFailed("Could not establish authenticated API session")
+
+    def _authorization_header_from_cookie(self):
+        auth_cookie = self.session.cookies.get("amhrdrauth")
+        if not auth_cookie:
+            return {}
+        return {"Authorization": auth_cookie}
 
     def _is_authenticated(self) -> bool:
         try:
@@ -150,6 +169,7 @@ class AimHarderClient:
             "Origin": self.base_url,
             "Referer": f"{self.base_url}/schedule?cl",
             "User-Agent": self.BROWSER_USER_AGENT,
+            **self._authorization_header_from_cookie(),
         }
 
     @staticmethod
