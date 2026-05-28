@@ -49,8 +49,50 @@ class AimHarderClient:
         self.base_url = f"https://{box_name}.aimharder.com"
         self.box_id = box_id
         self.box_name = box_name
-        self.session = self._login(email, password, proxy, box_name)
-        self._init_box_session()
+        self.session = self._create_authenticated_session()
+
+    def _create_authenticated_session(self) -> Session:
+        login_endpoints = (LOGIN_ENDPOINT, login_endpoint(self.box_name))
+        last_error = None
+        for endpoint in login_endpoints:
+            try:
+                session = self._login(
+                    self.email,
+                    self.password,
+                    self.proxy,
+                    endpoint=endpoint,
+                )
+                self.session = session
+                self._init_box_session()
+                self._ensure_cookie_alive()
+                if self._is_authenticated():
+                    logger.info("Authenticated API session verified")
+                    return session
+                logger.warning(
+                    "Login endpoint did not establish authenticated API session: %s",
+                    endpoint,
+                )
+            except Exception as e:
+                last_error = e
+                logger.warning("Login attempt failed for endpoint %s: %s", endpoint, e)
+
+        if last_error:
+            raise last_error
+        raise BookingFailed("Could not establish authenticated API session")
+
+    def _is_authenticated(self) -> bool:
+        try:
+            response = self.session.get(
+                f"{self.base_url}/api/notification",
+                params={"notificationsFormat": 0},
+                headers=self._api_headers(),
+            )
+            if response.status_code != HTTPStatus.OK:
+                return False
+            payload = self._get_response_payload(response)
+            return isinstance(payload, dict) and payload.get("logout") is None
+        except Exception:
+            return False
 
     def _init_box_session(self):
         """Visit the gym's schedule page to establish a valid subdomain session.
@@ -115,7 +157,7 @@ class AimHarderClient:
         email: str,
         password: str,
         proxy: Optional[str] = None,
-        box_name: Optional[str] = None,
+        endpoint: Optional[str] = None,
     ) -> Session:
         session = Session()
         session.proxies = {"https": proxy}
@@ -126,10 +168,10 @@ class AimHarderClient:
                 "User-Agent": AimHarderClient.BROWSER_USER_AGENT,
             }
         )
-        endpoint = login_endpoint(box_name) if box_name else LOGIN_ENDPOINT
+        login_url = endpoint or LOGIN_ENDPOINT
         logger.info(f"Using proxy: {'yes' if proxy else 'no'}")
         response = session.post(
-            endpoint,
+            login_url,
             data={
                 "login": "Log in",
                 "mail": email,
@@ -210,10 +252,7 @@ class AimHarderClient:
                             logger.warning(
                                 "Booking request forced logout. Re-authenticating and retrying once."
                             )
-                            self.session = self._login(
-                                self.email, self.password, self.proxy, self.box_name
-                            )
-                            self._init_box_session()
+                            self.session = self._create_authenticated_session()
                             continue
                         raise BookingFailed(
                             f"{MESSAGE_BOOKING_FAILED_UNKNOWN}. Session logged out "
