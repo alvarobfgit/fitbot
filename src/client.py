@@ -5,6 +5,7 @@ from typing import Optional
 
 from bs4 import BeautifulSoup
 from requests import Session
+from requests.exceptions import JSONDecodeError
 
 from constants import (
     LOGIN_ENDPOINT,
@@ -89,6 +90,13 @@ class AimHarderClient:
             return None
         return booked_class.get("bookState")
 
+    @staticmethod
+    def _get_response_payload(response):
+        try:
+            return response.json()
+        except (ValueError, JSONDecodeError):
+            return response.text
+
     def book_class(
         self, target_day: datetime, class_id: str, family_id: str | None = None
     ) -> bool:
@@ -101,19 +109,53 @@ class AimHarderClient:
                 "familyId": family_id,
             },
         )
+        response_payload = self._get_response_payload(response)
         if response.status_code == HTTPStatus.OK:
-            response = response.json()
-            if "bookState" in response and response["bookState"] == -2:
-                raise BookingFailed(MESSAGE_BOOKING_FAILED_NO_CREDIT)
-            if "bookState" in response and response["bookState"] == -12:
-                raise BookingFailed(MESSAGE_TOO_SOON_TO_BOOK)
-            if "errorMssg" not in response and "errorMssgLang" not in response:
-                for attempt in range(self.BOOKING_CONFIRMATION_RETRIES):
-                    booking_state = self._get_class_booking_state(
-                        target_day, class_id, family_id
+            if isinstance(response_payload, dict):
+                if "bookState" in response_payload and response_payload["bookState"] == -2:
+                    raise BookingFailed(MESSAGE_BOOKING_FAILED_NO_CREDIT)
+                if "bookState" in response_payload and response_payload["bookState"] == -12:
+                    raise BookingFailed(MESSAGE_TOO_SOON_TO_BOOK)
+                if (
+                    "errorMssg" not in response_payload
+                    and "errorMssgLang" not in response_payload
+                ):
+                    booking_state = None
+                    for attempt in range(self.BOOKING_CONFIRMATION_RETRIES):
+                        booking_state = self._get_class_booking_state(
+                            target_day, class_id, family_id
+                        )
+                        if booking_state == 1:
+                            return
+                        if attempt < self.BOOKING_CONFIRMATION_RETRIES - 1:
+                            time.sleep(self.BOOKING_CONFIRMATION_DELAY_SECONDS)
+                    logger.warning(
+                        "Booking request was accepted but not confirmed. "
+                        "api_response=%s confirmed_book_state=%s class_id=%s day=%s",
+                        response_payload,
+                        booking_state,
+                        class_id,
+                        target_day.strftime("%Y%m%d"),
                     )
-                    if booking_state == 1:
-                        return
-                    if attempt < self.BOOKING_CONFIRMATION_RETRIES - 1:
-                        time.sleep(self.BOOKING_CONFIRMATION_DELAY_SECONDS)
-        raise BookingFailed(MESSAGE_BOOKING_FAILED_UNKNOWN)
+                    raise BookingFailed(
+                        f"{MESSAGE_BOOKING_FAILED_UNKNOWN}. Booking not confirmed "
+                        f"(bookState={booking_state}, response={response_payload})"
+                    )
+            logger.warning(
+                "Booking endpoint returned an unexpected payload. status_code=%s payload=%s",
+                response.status_code,
+                response_payload,
+            )
+            raise BookingFailed(
+                f"{MESSAGE_BOOKING_FAILED_UNKNOWN}. Unexpected booking response "
+                f"({response_payload})"
+            )
+        logger.warning(
+            "Booking endpoint returned a non-OK status. status_code=%s payload=%s",
+            response.status_code,
+            response_payload,
+        )
+        raise BookingFailed(
+            f"{MESSAGE_BOOKING_FAILED_UNKNOWN}. HTTP {response.status_code} "
+            f"({response_payload})"
+        )
