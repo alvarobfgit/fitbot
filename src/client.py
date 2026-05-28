@@ -46,9 +46,24 @@ class AimHarderClient:
         self.password = password
         self.proxy = proxy
         self.base_url = f"https://{box_name}.aimharder.com"
-        self.session = self._login(email, password, proxy)
         self.box_id = box_id
         self.box_name = box_name
+        self.session = self._login(email, password, proxy)
+        self._init_box_session()
+
+    def _init_box_session(self):
+        """Visit the gym's schedule page to establish a valid subdomain session.
+        The browser always loads this page before making API calls, which sets
+        the necessary auth cookie for the subdomain.
+        """
+        try:
+            self.session.get(
+                f"{self.base_url}/schedule",
+                headers={"User-Agent": self.BROWSER_USER_AGENT},
+            )
+            logger.info("Box session initialized")
+        except Exception as e:
+            logger.warning("Box session initialization failed: %s", e)
 
     def _api_headers(self):
         return {
@@ -90,12 +105,13 @@ class AimHarderClient:
         return session
 
     def get_classes(self, target_day: datetime, family_id: str | None = None):
+        normalized_family_id = "" if family_id is None else family_id
         response = self.session.get(
             classes_endpoint(self.box_name),
             params={
                 "box": self.box_id,
                 "day": target_day.strftime("%Y%m%d"),
-                "familyId": family_id,
+                "familyId": normalized_family_id,
             },
             headers=self._api_headers(),
         )
@@ -127,6 +143,7 @@ class AimHarderClient:
     def book_class(
         self, target_day: datetime, class_id: str, family_id: str | None = None
     ) -> bool:
+        normalized_family_id = "" if family_id is None else family_id
         for request_attempt in range(self.BOOKING_REQUEST_RETRIES):
             response = self.session.post(
                 book_endpoint(self.box_name),
@@ -134,7 +151,7 @@ class AimHarderClient:
                     "id": class_id,
                     "day": target_day.strftime("%Y%m%d"),
                     "insist": 0,
-                    "familyId": family_id,
+                    "familyId": normalized_family_id,
                 },
                 headers={
                     **self._api_headers(),
@@ -153,12 +170,7 @@ class AimHarderClient:
                             self.session = self._login(
                                 self.email, self.password, self.proxy
                             )
-                            try:
-                                self.get_classes(target_day, family_id)
-                            except Exception as e:
-                                logger.warning(
-                                    "Session warm-up after re-login failed: %s", e
-                                )
+                            self._init_box_session()
                             continue
                         raise BookingFailed(
                             f"{MESSAGE_BOOKING_FAILED_UNKNOWN}. Session logged out "
