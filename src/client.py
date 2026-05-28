@@ -66,6 +66,41 @@ class AimHarderClient:
         except Exception as e:
             logger.warning("Box session initialization failed: %s", e)
 
+    def _ensure_cookie_alive(self):
+        """Mirror the browser keep-alive flow used before privileged actions.
+        The web app checks /cookiealive and, if needed, hits aimharder.com/hidereload
+        to refresh auth cookies.
+        """
+        try:
+            response = self.session.get(
+                f"{self.base_url}/cookiealive",
+                headers={
+                    "Accept": "application/json, text/plain, */*",
+                    "Referer": f"{self.base_url}/schedule?cl",
+                    "User-Agent": self.BROWSER_USER_AGENT,
+                },
+            )
+            response.raise_for_status()
+            payload = self._get_response_payload(response)
+            if isinstance(payload, dict) and payload.get("cookieAlive"):
+                return
+            logger.info("Cookie not alive according to /cookiealive. Refreshing session cookies")
+        except Exception as e:
+            logger.warning("Cookie alive check failed: %s", e)
+
+        try:
+            self.session.get(
+                "https://aimharder.com/hidereload?close=1",
+                headers={
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Referer": f"{self.base_url}/schedule?cl",
+                    "User-Agent": self.BROWSER_USER_AGENT,
+                },
+            )
+            self._init_box_session()
+        except Exception as e:
+            logger.warning("hidereload cookie refresh failed: %s", e)
+
     def _api_headers(self):
         return {
             "Accept": "*/*",
@@ -152,6 +187,7 @@ class AimHarderClient:
     ) -> bool:
         normalized_family_id = "" if family_id is None else family_id
         for request_attempt in range(self.BOOKING_REQUEST_RETRIES):
+            self._ensure_cookie_alive()
             response = self.session.post(
                 book_endpoint(self.box_name),
                 data={
