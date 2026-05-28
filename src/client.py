@@ -1,3 +1,4 @@
+import time
 from datetime import datetime
 from http import HTTPStatus
 from typing import Optional
@@ -23,6 +24,9 @@ from logger import logger
 
 
 class AimHarderClient:
+    BOOKING_CONFIRMATION_RETRIES = 3
+    BOOKING_CONFIRMATION_DELAY_SECONDS = 1
+
     def __init__(
         self,
         email: str,
@@ -69,6 +73,22 @@ class AimHarderClient:
         )
         return response.json().get("bookings")
 
+    def _get_class_booking_state(
+        self, target_day: datetime, class_id: str, family_id: str | None = None
+    ) -> int | None:
+        classes = self.get_classes(target_day, family_id) or []
+        booked_class = next(
+            (
+                scheduled_class
+                for scheduled_class in classes
+                if str(scheduled_class.get("id")) == str(class_id)
+            ),
+            None,
+        )
+        if booked_class is None:
+            return None
+        return booked_class.get("bookState")
+
     def book_class(
         self, target_day: datetime, class_id: str, family_id: str | None = None
     ) -> bool:
@@ -88,6 +108,12 @@ class AimHarderClient:
             if "bookState" in response and response["bookState"] == -12:
                 raise BookingFailed(MESSAGE_TOO_SOON_TO_BOOK)
             if "errorMssg" not in response and "errorMssgLang" not in response:
-                # booking went fine
-                return
+                for attempt in range(self.BOOKING_CONFIRMATION_RETRIES):
+                    booking_state = self._get_class_booking_state(
+                        target_day, class_id, family_id
+                    )
+                    if booking_state == 1:
+                        return
+                    if attempt < self.BOOKING_CONFIRMATION_RETRIES - 1:
+                        time.sleep(self.BOOKING_CONFIRMATION_DELAY_SECONDS)
         raise BookingFailed(MESSAGE_BOOKING_FAILED_UNKNOWN)

@@ -100,18 +100,35 @@ class TestMain:
         with (
             patch("requests.Session.post") as m_post,
             patch("requests.Session.get") as m_get,
+            patch("main.wait_until_time"),
         ):
             m_post.side_effect = self.mock_request_post
-            m_get.return_value.json.return_value = {
-                "bookings": [
-                    {
-                        "id": 123,
-                        "timeid": "1700_60",
-                        "className": "Provenza",
-                        "bookState": None,
+            m_get.side_effect = [
+                Mock(
+                    json=lambda: {
+                        "bookings": [
+                            {
+                                "id": 123,
+                                "timeid": "1700_60",
+                                "className": "Provenza",
+                                "bookState": None,
+                            }
+                        ]
                     }
-                ]
-            }
+                ),
+                Mock(
+                    json=lambda: {
+                        "bookings": [
+                            {
+                                "id": 123,
+                                "timeid": "1700_60",
+                                "className": "Provenza",
+                                "bookState": 1,
+                            }
+                        ]
+                    }
+                ),
+            ]
             main(
                 email="foo",
                 password="bar",
