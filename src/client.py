@@ -63,6 +63,13 @@ class AimHarderClient:
     def _login(email: str, password: str, proxy: Optional[str] = None) -> Session:
         session = Session()
         session.proxies = {"https": proxy}
+        session.headers.update(
+            {
+                "Accept": "*/*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "User-Agent": AimHarderClient.BROWSER_USER_AGENT,
+            }
+        )
         logger.info(f"Using proxy: {'yes' if proxy else 'no'}")
         response = session.post(
             LOGIN_ENDPOINT,
@@ -146,6 +153,12 @@ class AimHarderClient:
                             self.session = self._login(
                                 self.email, self.password, self.proxy
                             )
+                            try:
+                                self.get_classes(target_day, family_id)
+                            except Exception as e:
+                                logger.warning(
+                                    "Session warm-up after re-login failed: %s", e
+                                )
                             continue
                         raise BookingFailed(
                             f"{MESSAGE_BOOKING_FAILED_UNKNOWN}. Session logged out "
