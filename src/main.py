@@ -81,9 +81,9 @@ def main(
         logger.info(str(e))
         return
     client = AimHarderClient(
-        email=email, password=password, box_id=box_id, box_name=box_name, proxy=proxy
+        email=email, password=password, box_id=box_id, box_name=box_name
     )
-    classes = client.get_classes(target_day, family_id)
+    classes = client.get_classes(target_day)
     _class = get_class_to_book(classes, target_time, target_name)
     if _class["bookState"] == 1:
         logger.info("Class already booked. Nothing to do")
@@ -93,7 +93,7 @@ def main(
         wait_until_time(target_time)
 
         # Book the class
-        client.book_class(target_day, _class["id"], family_id)
+        client.book_class(target_day, _class)
     except BookingFailed as e:
         logger.error(str(e))
         return
