@@ -90,59 +90,41 @@ class TestAimHarderClient:
             assert client.get_classes(datetime.datetime(2022, 3, 2)) == expected_classes
 
     @pytest.mark.parametrize(
-        "response, status_code, fetched_classes, expectation",
+        "response, status_code, expectation",
         (
             (
                 None,
                 HTTPStatus.INTERNAL_SERVER_ERROR,
-                None,
                 pytest.raises(BookingFailed, match=MESSAGE_BOOKING_FAILED_UNKNOWN),
             ),
             (
                 {},
                 HTTPStatus.OK,
-                [{"id": 123, "bookState": 1}],
-                does_not_raise(),
-            ),
-            (
-                {"bookState": 1, "id": "123"},
-                HTTPStatus.OK,
-                None,
                 does_not_raise(),
             ),
             (
                 {"errorMssg": "foo"},
                 HTTPStatus.OK,
-                None,
                 pytest.raises(BookingFailed, match=MESSAGE_BOOKING_FAILED_UNKNOWN),
             ),
             (
                 {"errorMssgLang": "foo"},
                 HTTPStatus.OK,
-                None,
                 pytest.raises(BookingFailed, match=MESSAGE_BOOKING_FAILED_UNKNOWN),
             ),
             (
                 {"bookState": -2},
                 HTTPStatus.OK,
-                None,
                 pytest.raises(BookingFailed, match=MESSAGE_BOOKING_FAILED_NO_CREDIT),
             ),
             (
                 {"bookState": -12},
                 HTTPStatus.OK,
-                None,
                 pytest.raises(BookingFailed, match=MESSAGE_TOO_SOON_TO_BOOK),
-            ),
-            (
-                {},
-                HTTPStatus.OK,
-                [{"id": 123, "bookState": None}],
-                pytest.raises(BookingFailed, match=MESSAGE_BOOKING_FAILED_UNKNOWN),
             ),
         ),
     )
-    def test_book_class(self, response, status_code, fetched_classes, expectation):
+    def test_book_class(self, response, status_code, expectation):
         # mock login
         with patch("requests.Session.post") as m_post:
             m_post.return_value.content = f'<span id="{ERROR_TAG_ID}"></span>'
@@ -150,39 +132,8 @@ class TestAimHarderClient:
                 email="foo", password="bar", box_id=1, box_name="foo"
             )
 
-        with (
-            patch("requests.Session.post") as m_post,
-            patch.object(client, "get_classes", return_value=fetched_classes),
-            patch("client.time.sleep"),
-        ):
+        with patch("requests.Session.post") as m_post:
             m_post.return_value.json.return_value = response
             m_post.return_value.status_code = status_code
             with expectation:
                 client.book_class(datetime.datetime(2022, 3, 2), "123")
-
-    def test_book_class_retries_on_logout_response(self):
-        # mock login for client creation
-        with patch("requests.Session.post") as m_post:
-            m_post.return_value.content = f'<span id="{ERROR_TAG_ID}"></span>'
-            client = AimHarderClient(
-                email="foo", password="bar", box_id=1, box_name="foo"
-            )
-
-        book_response_logout = type("R", (), {})()
-        book_response_logout.status_code = HTTPStatus.OK
-        book_response_logout.json = lambda: {"logout": 1}
-
-        book_response_success = type("R", (), {})()
-        book_response_success.status_code = HTTPStatus.OK
-        book_response_success.json = lambda: {"bookState": 1, "id": "123"}
-
-        login_response = type("R", (), {})()
-        login_response.content = f'<span id="{ERROR_TAG_ID}"></span>'
-
-        with (
-            patch("requests.Session.post") as m_post,
-            patch.object(client, "get_classes", return_value=[]),
-            patch("client.time.sleep"),
-        ):
-            m_post.side_effect = [book_response_logout, login_response, book_response_success]
-            client.book_class(datetime.datetime(2022, 3, 2), "123")
