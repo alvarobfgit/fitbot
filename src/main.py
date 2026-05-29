@@ -26,28 +26,28 @@ def get_booking_goal_time(day: datetime, booking_goals):
 
 def get_class_to_book(classes: list[dict], target_time: str, class_name: str) -> dict:
     if len(classes) == 0:
-        logger.error(f"{user_name} - Box is closed.")
+        logger.error("Box is closed.")
         raise BoxClosed
 
     if any(target_time in s["timeid"] for s in classes):
-        logger.info(f"{user_name} - Class found for time ({target_time})")
+        logger.info(f"Class found for time ({target_time})")
         if "OPEN" in class_name:
             found_classes = [s for s in classes if target_time in s["timeid"]]
         else:
             found_classes = [s for s in classes if target_time in s["timeid"] and 'OPEN' not in s['className']]
     else:
-        logger.error(f"{user_name} - No class found for time ({target_time})")
+        logger.error(f"No class found for time ({target_time})")
         raise NoBookingGoal(target_time)
 
     if (len(found_classes)) > 1:
         if any(class_name in s["className"] for s in found_classes):
-            logger.info(f"{user_name} - Class found for class name ({class_name})")
+            logger.info(f"Class found for class name ({class_name})")
             found_classes = [s for s in found_classes if class_name in s["className"]]
         else:
-            logger.error(f"{user_name} - No class found for class name ({class_name})")
+            logger.error(f"No class found for class name ({class_name})")
             raise NoBookingGoal(class_name)
 
-    logger.info(f"{user_name} - Class found: {found_classes[0]}")
+    logger.info(f"Class found: {found_classes[0]}")
     return found_classes[0]
 
 def wait_until_time(execution_time: str):
